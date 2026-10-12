@@ -1,0 +1,38 @@
+# Hugging Face Space dependencies for the ParamISP demo.
+#
+# The network is a PyTorch port of the official implementation
+# (https://github.com/woo525/ParamISP); it reuses the upstream `layers` and
+# `data.utils` code, which only depend on the packages below.
+#
+# `torch` is intentionally *not* pinned: the Space runtime (ZeroGPU) preinstalls
+# a supported version, and pinning an unsupported one raises
+# `CONFIG_ERROR: torch version in requirements.txt is not compatible with ZeroGPU`.
+# `numpy` is held below 2.0 because the vendored upstream code still uses
+# `np.float_` / `np.bool8` (removed in NumPy 2).
+numpy<2
+scipy
+pillow
+tifffile
+exifread
+matplotlib
+toolz
+pyyaml
+python-dotenv
+rawpy
+gdown
+kornia>=0.7,<0.9
+
+# Web UI + Hub helpers.
+# The web stack is pinned to the versions gradio 4.44.1 is compatible with: a
+# newer fastapi/starlette breaks the (removed) `TemplateResponse(name, context)`
+# API that gradio 4.44.1 still uses.
+gradio==4.44.1
+gradio_client==1.3.0
+pydantic==2.9.2
+fastapi==0.115.0
+starlette==0.38.6
+uvicorn==0.30.6
+jinja2<3.2
+huggingface_hub==0.24.7
+spaces
+
