@@ -97,10 +97,36 @@ def test_camera_raw_path():
           "value %.4f" % float(arr.mean()))
 
 
+def test_neutral_preview_for_unknown_camera():
+    """A neutral-grey mosaic must not render magenta/green on the upload path.
+
+    ``visualize_raw(..., white_balance=None, color_matrix=None)`` is what the
+    app uses for uploaded RAWs (the camera's parameters are unknown): it
+    derives a gray-world WB from the mosaic and skips the colour matrix
+    (previously another camera's matrix was substituted, which could collapse
+    the green channel -> bright magenta previews).
+    """
+    rng = np.random.default_rng(7)
+    mosaic = np.clip(0.2 + 0.02 * rng.random((64, 96)).astype(np.float32), 0.0, 1.0)
+    out = dataio.visualize_raw(mosaic, "RGGB", None, None)
+    means = [float(out[..., c].mean()) for c in range(3)]
+    spread = max(means) - min(means)
+    assert out.shape == (64, 96, 3) and not np.isnan(out).any()
+    assert spread < 0.1, f"non-neutral preview: {means}"
+    # the known-camera path (explicit WB + colour matrix) still runs unchanged
+    cm = np.asarray([[3.7, -0.59, -0.11], [-1.59, 7.33, -2.74],
+                     [0.05, -1.06, 4.01]], dtype=np.float32)
+    out2 = dataio.visualize_raw(mosaic, "RGGB", (2.0, 1.0, 1.5), color_matrix=cm)
+    assert out2.shape == out.shape and not np.isnan(out2).any()
+    print("OK  neutral GT preview (upload path) + known-matrix path,",
+          "spread %.4f" % spread)
+
+
 def main():
     test_npy_and_tif()
     test_missing_rawpy()
     test_camera_raw_path()
+    test_neutral_preview_for_unknown_camera()
     print("\nRAW-LOAD TEST PASSED")
 
 

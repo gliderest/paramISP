@@ -93,6 +93,30 @@ def estimate_white_balance(srgb: np.ndarray) -> tuple[float, float, float]:
     return tuple(float(v) for v in wb)
 
 
+def mosaic_channel_stats(mosaic, bayer_pattern: str) -> tuple[list[float], list[float]]:
+    """Mean and std of the R / G / B pixels of a single-channel Bayer mosaic."""
+    arr = np.asarray(mosaic, dtype=np.float32)
+    if arr.ndim == 3:
+        arr = arr[..., 0]
+    bp = np.asarray(utils.camera.BayerPatternFlag.str_to_numpy(bayer_pattern))
+    gy, gx = np.meshgrid(np.arange(arr.shape[0]), np.arange(arr.shape[1]), indexing="ij")
+    channel_of = bp[gy % 2, gx % 2]
+    means, stds = [], []
+    for c in range(3):
+        seg = arr[channel_of == c]
+        means.append(float(seg.mean()) if seg.size else 0.0)
+        stds.append(float(seg.std()) if seg.size else 0.0)
+    return means, stds
+
+
+def estimate_mosaic_white_balance(mosaic, bayer_pattern: str) -> tuple[float, float, float]:
+    """Gray-world white balance (green == 1) taken from the mosaic itself."""
+    means, _ = mosaic_channel_stats(mosaic, bayer_pattern)
+    g = means[1] or 1e-6
+    wb = (g / (means[0] or 1e-6), 1.0, g / (means[2] or 1e-6))
+    return tuple(min(max(v, 0.05), 20.0) for v in wb)
+
+
 def load_raw_mosaic(path: str | Path) -> tuple[np.ndarray, str | None]:
     """Load a single-channel RAW mosaic from a RAW/`.npy`/`.tif` file.
 
@@ -223,17 +247,26 @@ def build_batch(
 def visualize_raw(
     mosaic,
     bayer_pattern: str,
-    white_balance=DEFAULT_WHITE_BALANCE,
+    white_balance=None,
     color_matrix=None,
     camera_model: str = "D7000",
 ) -> np.ndarray:
     """Render a single-channel Bayer mosaic as an ``(H, W, 3)`` sRGB preview.
 
-    Mirrors ``AlgorithmOnlyModel.visualize_raw``: white balance -> demosaic ->
-    color correction -> sRGB transfer.
+    Mirrors ``AlgorithmOnlyModel.visualize_raw`` (white balance -> demosaic ->
+    color correction -> sRGB transfer) and, for RAW files from cameras without
+    known parameters, uses two demo-friendly defaults:
+
+    * ``white_balance=None`` -> gray-world estimate from the mosaic itself;
+    * ``color_matrix=None``  -> the color-correction step is skipped *instead of*
+      substituting another camera's (camera -> sRGB) matrix, which can produce
+      strong colour casts (e.g. bright magenta) on an unrelated camera's RAW.
+
+    Pass the instance's own values (as stored in ``examples/``) to get the exact
+    paper rendering.
     """
-    if color_matrix is None:
-        color_matrix = data.utils.known_color_matrix([CAMERA_INFO[camera_model]["name"]])[0].numpy()
+    if white_balance is None:
+        white_balance = estimate_mosaic_white_balance(mosaic, bayer_pattern)
 
     x = torch.as_tensor(np.asarray(mosaic), dtype=torch.float32)
     if x.dim() == 2:
@@ -243,12 +276,13 @@ def visualize_raw(
 
     bp = bayer_pattern_tensor(bayer_pattern)
     wb = torch.as_tensor(np.asarray(white_balance, dtype=np.float32), dtype=torch.float32).view(1, 3)
-    cm = torch.as_tensor(np.asarray(color_matrix), dtype=torch.float32).view(1, 3, 3)
 
     demosaic = layers.bayer.Demosaic()
     x = layers.bayer.apply_white_balance(x, bp, wb)
     x = demosaic(x, bp)
-    x = layers.color.apply_color_matrix(x.clip(0, 1), cm).clip(0, 1)
+    if color_matrix is not None:
+        cm = torch.as_tensor(np.asarray(color_matrix), dtype=torch.float32).view(1, 3, 3)
+        x = layers.color.apply_color_matrix(x.clip(0, 1), cm).clip(0, 1)
     x = layers.color.linear_to_srgb(x)
 
     return x[0].permute(1, 2, 0).clamp(0, 1).numpy()

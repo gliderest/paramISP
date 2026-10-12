@@ -178,7 +178,12 @@ with tab_inv:
                     model, srgb, device, camera_model=cam, bayer_pattern=bp,
                     white_balance=wbv, color_matrix=cm, exif=exif)
                 elapsed = time.perf_counter() - start
-                preview = dataio.visualize_raw(mosaic, bp, wbv, color_matrix=cm, camera_model=cam)
+                # For uploaded RAWs the camera's colour matrix is unknown, so the
+                # preview renders neutrally (gray-world WB, no colour matrix);
+                # built-in examples use their own instance parameters.
+                preview = dataio.visualize_raw(
+                    mosaic, bp, wbv if cm is not None else None,
+                    color_matrix=cm, camera_model=cam)
 
             st.success(f"{param_summary(cam, bp, exif)}  ·  {label}")
             # ---- metrics ----
@@ -198,7 +203,8 @@ with tab_inv:
                 c1, c2, c3 = st.columns(3)
                 c1.image(srgb, caption="Input sRGB")
                 c2.image(preview, caption="Predicted RAW (preview)")
-                c3.image(dataio.visualize_raw(gt, bp, wbv, color_matrix=cm, camera_model=cam),
+                c3.image(dataio.visualize_raw(gt, bp, wbv if cm is not None else None,
+                                 color_matrix=cm, camera_model=cam),
                          caption="Ground-truth RAW (preview)")
                 diff = np.abs(mosaic - gt)
                 dm = float(np.nanmax(diff)) if diff.size else 1.0

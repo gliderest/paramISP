@@ -18,3 +18,7 @@ weights_gdrive/
 
 # Local demo output / generated previews
 assets/_*
+
+# User-supplied test photos (not part of the repo)
+examples/SUN_*
+*.npy

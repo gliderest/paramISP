@@ -31,6 +31,12 @@ camera's JPEG (e.g. RAW `4020×6036` vs JPEG `4000×6000`).  When the two sizes
 differ, the app finds the pixel offset between them automatically and crops
 both to the same pixel size before computing metrics.
 
+RAW previews of uploaded files are rendered **neutrally** (a gray-world white
+balance, no camera colour matrix), because an arbitrary camera's own matrix is
+unknown — substituting another camera's matrix would tint the preview (e.g. a
+bright magenta cast).  Built-in examples keep their instance's real parameters,
+so their previews use the exact paper rendering.
+
 ## Project layout
 
 ```
