@@ -20,18 +20,25 @@ Camera parameters (ISO, exposure time, focal length, f-number, white balance and
 the camera→sRGB colour matrix) are read from the uploaded image's EXIF when
 available, or set manually.
 
+If the original RAW for the image is available — either uploaded by the user or
+provided by a built-in example — the app also computes **PSNR, SSIM and MAE**
+between the prediction and the ground truth, plus the inference time.
+
 ## Project layout
 
 ```
 streamlit_app/streamlit_app.py        the web UI (Streamlit)
 paramisp_demo/
+  metrics.py                          PSNR / SSIM / MAE comparison
+  examples.py                         reads examples/ + manifest.json
   net.py                              the ParamISP network (PyTorch port, no Lightning)
   dataio.py                           image/EXIF loading + the network input batch
   inference.py                        checkpoint loading + sRGB<->RAW prediction
   weights.py                          locate / download the official checkpoints
 paramisp_src/                         vendored upstream sources (layers/, data/, utils/)
+examples/                             built-in sRGB + ground-truth RAW examples + manifest
 notebooks/paramisp_demo_colab.ipynb   Google Colab runner
-scripts/                              tests + helper scripts
+scripts/                              tests + helpers (incl. fetch_examples.py)
 requirements.txt                      runtime dependencies
 ```
 
@@ -67,6 +74,20 @@ Dependencies are read from the repository-root `requirements.txt`.
 
 Open `notebooks/paramisp_demo_colab.ipynb`. CPU is sufficient; a free T4 GPU is
 available via *Runtime ▸ Change runtime type* if you want it.
+
+## Demo examples
+
+The *inverse* tab's **Input source ▸ Built-in example** lists real instances from
+the official ParamISP dataset — each ships its sRGB crop, its ground-truth RAW,
+and that instance's own camera parameters (white balance, colour matrix, EXIF),
+so you can reproduce the PSNR / SSIM comparison without uploading anything.
+
+To regenerate or extend them from the dataset:
+
+```bash
+python scripts/fetch_examples.py                 # downloads patchsets.zip (~2.7 GB), 1 example per camera
+python scripts/fetch_examples.py --per-camera 2  # more examples per camera
+```
 
 ## Checkpoints
 

@@ -59,6 +59,25 @@ def _resize(x: np.ndarray, nh: int, nw: int, *, upscale: bool) -> np.ndarray:
     return np.asarray(im).astype(np.float32) / 255.0
 
 
+def _fit_scale(h: int, w: int, max_side: int | None, min_side: int | None) -> float:
+    scale = 1.0
+    if max_side is not None and max(h, w) > max_side:
+        scale = max_side / max(h, w)
+    if min_side is not None and min(h, w) * scale < min_side:
+        scale = min_side / min(h, w)
+    return scale
+
+
+def _geometry(h: int, w: int, multiple: int, max_side: int | None, min_side: int | None):
+    """Return ``(scale, nh, nw, top, left, ch, cw)`` for the resize + center-crop."""
+    scale = _fit_scale(h, w, max_side, min_side)
+    if abs(scale - 1.0) > 1e-6:
+        h, w = max(1, int(round(h * scale))), max(1, int(round(w * scale)))
+    ch = (h // multiple) * multiple
+    cw = (w // multiple) * multiple
+    return scale, h, w, (h - ch) // 2, (w - cw) // 2, ch, cw
+
+
 def _crop_to_multiple(x: np.ndarray, multiple: int = 4, max_side: int | None = 1024,
                       min_side: int = 128) -> np.ndarray:
     """Resize to ``[min_side, max_side]`` and center-crop to a multiple of ``multiple``.
@@ -69,21 +88,30 @@ def _crop_to_multiple(x: np.ndarray, multiple: int = 4, max_side: int | None = 1
     are divisible by 4 (the network's two down/up-sampling stages).
     """
     h, w = x.shape[:2]
-    scale = 1.0
-    if max_side is not None and max(h, w) > max_side:
-        scale = max_side / max(h, w)
-    if min_side is not None and min(h, w) * scale < min_side:
-        scale = min_side / min(h, w)
+    scale, nh, nw, top, left, ch, cw = _geometry(h, w, multiple, max_side, min_side)
     if abs(scale - 1.0) > 1e-6:
-        nh, nw = max(1, int(round(h * scale))), max(1, int(round(w * scale)))
         x = _resize(x, nh, nw, upscale=scale > 1.0)
-        h, w = x.shape[:2]
-
-    ch = (h // multiple) * multiple
-    cw = (w // multiple) * multiple
-    top = (h - ch) // 2
-    left = (w - cw) // 2
     return x[top:top + ch, left:left + cw]
+
+
+def align_pair(srgb: np.ndarray, gt: np.ndarray, multiple: int = 4,
+               max_side: int | None = 1024, min_side: int = 128):
+    """Apply *the same* resize + center-crop to an sRGB image and its aligned GT RAW.
+
+    Used before computing metrics so the prediction and the ground truth stay
+    pixel-aligned.  Both inputs must share the same spatial size.
+    """
+    srgb = np.asarray(srgb, dtype=np.float32)
+    gt = np.asarray(gt, dtype=np.float32)
+    if srgb.shape[:2] != gt.shape[:2]:
+        raise ValueError(f"size mismatch: sRGB {srgb.shape[:2]} vs RAW {gt.shape[:2]}")
+
+    h, w = srgb.shape[:2]
+    scale, nh, nw, top, left, ch, cw = _geometry(h, w, multiple, max_side, min_side)
+    if abs(scale - 1.0) > 1e-6:
+        srgb = _resize(srgb, nh, nw, upscale=scale > 1.0)
+        gt = _resize(gt, nh, nw, upscale=scale > 1.0)
+    return srgb[top:top + ch, left:left + cw], gt[top:top + ch, left:left + cw]
 
 
 @torch.no_grad()
