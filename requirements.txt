@@ -1,17 +1,16 @@
-# Hugging Face Space dependencies for the ParamISP demo.
+# Runtime dependencies for the ParamISP demo (CPU is sufficient).
 #
-# The network is a PyTorch port of the official implementation
-# (https://github.com/woo525/ParamISP); it reuses the upstream `layers` and
-# `data.utils` code, which only depend on the packages below.
+# Used by:
+#   * Streamlit Community Cloud (entry point: streamlit_app/streamlit_app.py);
+#     Community Cloud falls back to this root file since the entry point's
+#     directory no longer has its own requirements.txt
+#   * local runs:  streamlit run streamlit_app/streamlit_app.py
 #
-# `torch` is intentionally *not* pinned: the Space runtime (ZeroGPU) preinstalls
-# a supported version, and pinning an unsupported one raises
-# `CONFIG_ERROR: torch version in requirements.txt is not compatible with ZeroGPU`.
-# `numpy` is held below 2.0 for maximum compatibility with the runtime's
-# preinstalled torch.  (The vendored code is also NumPy-2 clean — see
-# paramisp_src/utils/camera.py and convert.py — so this can be relaxed when a
-# newer torch is guaranteed.)
-numpy<2
+# `torch` is deliberately unpinned so it resolves to a build matching the running
+# Python version. The vendored upstream code is NumPy-2 clean, so `numpy` is
+# unpinned too.
+torch
+numpy
 scipy
 pillow
 tifffile
@@ -23,18 +22,4 @@ python-dotenv
 rawpy
 gdown
 kornia>=0.7,<0.9
-
-# Web UI + Hub helpers.
-# The web stack is pinned to the versions gradio 4.44.1 is compatible with: a
-# newer fastapi/starlette breaks the (removed) `TemplateResponse(name, context)`
-# API that gradio 4.44.1 still uses.
-gradio==4.44.1
-gradio_client==1.3.0
-pydantic==2.9.2
-fastapi==0.115.0
-starlette==0.38.6
-uvicorn==0.30.6
-jinja2<3.2
-huggingface_hub==0.24.7
-spaces
-
+streamlit>=1.32,<2

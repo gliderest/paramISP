@@ -3,11 +3,8 @@
 Checkpoints are searched, in order, from:
 
 1. the local ``weights/`` directory (``weights/<mode>/<camera>.ckpt``);
-2. a Hugging Face Hub repo given by ``PARAMISP_WEIGHTS_REPO`` (e.g.
-   ``"my-user/paramisp-weights"``), downloading ``<mode>/<camera>.ckpt``;
-3. the Google Drive folder shared by the authors, given by
-   ``PARAMISP_GDRIVE_ID`` (defaults to the official folder), downloaded with
-   ``gdown``.
+2. the Google Drive archive shared by the authors — the ``weights.zip`` file id
+   can be overridden with ``PARAMISP_GDRIVE_ZIP_ID`` — downloaded with ``gdown``.
 
 ``mode`` is ``"inverse"`` (sRGB -> RAW) or ``"forward"`` (RAW -> sRGB).
 """
@@ -34,27 +31,6 @@ def expected_path(mode: str, camera: str) -> Path:
 
 def is_available(mode: str, camera: str) -> bool:
     return expected_path(mode, camera).exists()
-
-
-def _download_from_hub(mode: str, camera: str) -> Path | None:
-    repo = os.environ.get("PARAMISP_WEIGHTS_REPO")
-    if not repo:
-        return None
-    try:
-        from huggingface_hub import hf_hub_download
-
-        try:
-            cached = hf_hub_download(repo_id=repo, filename=f"{mode}/{camera}.ckpt")
-        except Exception:
-            cached = hf_hub_download(repo_id=repo, filename=f"{mode}/{camera}.pth")
-        target = expected_path(mode, camera)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if not target.exists():
-            target.write_bytes(Path(cached).read_bytes())
-        return target if target.exists() else None
-    except Exception as exc:  # noqa: BLE001
-        print(f"[weights] Hub download failed: {exc}")
-        return None
 
 
 def _download_from_gdrive() -> None:
@@ -107,10 +83,6 @@ def ensure_weights(mode: str, camera: str) -> Path:
     if path.exists():
         return path
 
-    hub_path = _download_from_hub(mode, camera)
-    if hub_path is not None and hub_path.exists():
-        return hub_path
-
     if os.environ.get("PARAMISP_SKIP_GDRIVE") != "1":
         _download_from_gdrive()
         if path.exists():
@@ -118,8 +90,9 @@ def ensure_weights(mode: str, camera: str) -> Path:
 
     raise FileNotFoundError(
         f"Checkpoint '{mode}/{camera}.ckpt' was not found in {weights_dir()}. "
-        "Place the official weights there, set PARAMISP_WEIGHTS_REPO to a "
-        "Hugging Face repo, or set PARAMISP_GDRIVE_ID to the shared folder."
+        "Place the official weights there (weights/inverse/<camera>.ckpt and "
+        "weights/forward/<camera>.ckpt) or point PARAMISP_WEIGHTS_DIR at a "
+        "directory that already contains them."
     )
 
 

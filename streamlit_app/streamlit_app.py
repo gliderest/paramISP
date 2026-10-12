@@ -1,9 +1,8 @@
 """ParamISP demo for Streamlit Community Cloud (free, CPU-only).
 
 Deploy at https://share.streamlit.io with **Main file path** =
-``streamlit_app/streamlit_app.py``. Dependencies are read from
-``streamlit_app/requirements.txt`` (the entry point's directory takes precedence
-over the repository root's ``requirements.txt``).
+``streamlit_app/streamlit_app.py``. Dependencies are read from the repository
+root ``requirements.txt``.
 """
 from __future__ import annotations
 
@@ -139,6 +138,5 @@ with tab_fwd:
 
 st.divider()
 st.caption(
-    "Full source: [github.com/gliderest/paramISP](https://github.com/gliderest/paramISP) · "
-    "static project page: [huggingface.co/spaces/sundaboi/paramISP](https://huggingface.co/spaces/sundaboi/paramISP)"
+    "Full source: [github.com/gliderest/paramISP](https://github.com/gliderest/paramISP)"
 )

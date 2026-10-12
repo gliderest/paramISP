@@ -16,5 +16,4 @@ weights_gdrive/
 *.zip
 
 # Local demo output / generated previews
-paramisp_raw_prediction.tiff
 assets/_*

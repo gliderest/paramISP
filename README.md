@@ -1,48 +1,38 @@
----
-title: ParamISP
-emoji: 📷
-colorFrom: indigo
-colorTo: purple
-sdk: gradio
-sdk_version: 4.44.1
-app_file: app.py
-pinned: false
-license: mit
----
+# ParamISP — forward / inverse camera ISP demo
 
-# ParamISP — interactive demo
-
-Hugging Face Space for **ParamISP: Learned Forward and Inverse ISPs using Camera
+Interactive demo for **ParamISP: Learned Forward and Inverse ISPs using Camera
 Parameters** (CVPR 2024).
 
 * Paper: <https://arxiv.org/abs/2312.13313>
-* Code: <https://github.com/woo525/ParamISP>
+* Official code: <https://github.com/woo525/ParamISP>
 * Project page: <https://woo525.github.io/ParamISP/>
 
-The demo exposes both directions of the learned camera ISP:
+The model is only **~0.7M parameters** and runs on **CPU** — no GPU required.
 
-| Tab | Direction | Input | Output |
-|-----|-----------|-------|--------|
-| **sRGB → RAW** | inverse ISP | an sRGB image + camera parameters | the predicted single-channel Bayer RAW |
-| **RAW → sRGB** | forward ISP | a Bayer RAW file + camera parameters | the rendered sRGB image |
+Both directions of the learned camera ISP are exposed:
+
+| Direction | Input | Output |
+|---|---|---|
+| **Inverse ISP** (sRGB → RAW) | an sRGB image + camera parameters | the predicted single-channel Bayer RAW |
+| **Forward ISP** (RAW → sRGB) | a Bayer RAW file + camera parameters | the rendered sRGB image |
 
 Camera parameters (ISO, exposure time, focal length, f-number, white balance and
-the camera→sRGB color matrix) are read from the uploaded image's EXIF when
+the camera→sRGB colour matrix) are read from the uploaded image's EXIF when
 available, or set manually.
 
-## How it works
+## Project layout
 
 ```
-app.py                      Gradio interface (Hugging Face Space)
-streamlit_app/              Streamlit Community Cloud app (+ its requirements.txt)
-index.html                  static project page (served by a Static Space)
-notebooks/                  Google Colab runner
+streamlit_app/streamlit_app.py        the web UI (Streamlit)
 paramisp_demo/
-  net.py                    the ParamISP network (PyTorch port, no Lightning)
-  dataio.py                 image/EXIF loading + building the network input batch
-  inference.py              checkpoint loading + sRGB<->RAW prediction
-  weights.py                locate / download the official checkpoints
-paramisp_src/               vendored upstream sources (layers/, data/, utils/)
+  net.py                              the ParamISP network (PyTorch port, no Lightning)
+  dataio.py                           image/EXIF loading + the network input batch
+  inference.py                        checkpoint loading + sRGB<->RAW prediction
+  weights.py                          locate / download the official checkpoints
+paramisp_src/                         vendored upstream sources (layers/, data/, utils/)
+notebooks/paramisp_demo_colab.ipynb   Google Colab runner
+scripts/                              tests + helper scripts
+requirements.txt                      runtime dependencies
 ```
 
 `paramisp_demo/net.py` is a verbatim port of the computation in
@@ -50,76 +40,19 @@ paramisp_src/               vendored upstream sources (layers/, data/, utils/)
 so the official `.ckpt` files load directly. The vendored `layers/` and
 `data.utils` modules are used unchanged.
 
-## Checkpoints
-
-The official weights are not redistributed here. The app looks for them, in
-order, at:
-
-1. `weights/<mode>/<camera>.ckpt` (e.g. `weights/inverse/D7000.ckpt`);
-2. a Hugging Face repo set via `PARAMISP_WEIGHTS_REPO`;
-3. the authors' shared Google Drive folder (`PARAMISP_GDRIVE_ID`).
-
-Camera models: `A7R3`, `D7000`, `D90`, `D40`, `S7`. Modes: `inverse`, `forward`.
-
-## Running locally
+## Running the app
 
 ```bash
 python -m venv .venv
-. .venv/bin/activate      # Windows: .venv\Scripts\activate
+. .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-python app.py             # add --share for a temporary public *.gradio.live link
+streamlit run streamlit_app/streamlit_app.py
 ```
-
-`scripts/smoke_test.py` runs a forward pass per direction without weights;
-`scripts/real_inference_test.py` runs the full pipeline with the official weights.
-
-## Free ways to run it
-
-The model is only **~0.7M parameters** and runs on **CPU**, so a GPU is optional.
-
-| Option | Cost | Notes |
-|---|---|---|
-| **Streamlit Community Cloud** | free | persistent hosted web app, CPU only (up to 2.7 GB RAM) — see below |
-| **Local** | free | `python app.py --share` creates a public `*.gradio.live` link (no account) |
-| **Google Colab** | free | open `notebooks/paramisp_demo_colab.ipynb`; free T4 via *Runtime ▸ Change runtime type* |
-| **Kaggle Notebooks** | free | T4/P100 (~30 h/week); same steps as the Colab notebook |
-| **Lightning AI Studio / Modal** | free credits | run `python app.py --host 0.0.0.0 --port 7860` |
-| **Hugging Face ZeroGPU** | free* | Gradio Space for eligible accounts, or via a community grant |
-| **Hugging Face Static** | free | `--static`; serves `index.html` (cannot run the model) |
-
-\* Hugging Face requires a paid plan for Gradio hosting on most accounts; the exceptions are free ZeroGPU allocations (up to 2, for personal accounts in good standing) and approved community grants.
-
-## Deploying to Hugging Face Spaces
-
-```bash
-huggingface-cli login --token <WRITE_TOKEN>
-
-# Free Static Space (serves index.html; works on any account)
-python scripts/deploy_space.py <user>/<space-name> --static
-
-# Gradio Space (needs ZeroGPU — free on eligible accounts — or PRO/cpu-basic)
-python scripts/deploy_space.py <user>/<space-name> --hardware zero-a10g
-```
-
-The **Static** Space serves `index.html`, a self-contained project page with real
-result images (`scripts/make_static_assets.py`) and a link to the code. The full
-Gradio app is uploaded alongside it; to turn the interactive demo on once you
-have hardware, set `sdk: gradio` (plus `sdk_version`/`app_file`) in the Space's
-README front matter.
-
-Checkpoints are **not** committed; they are downloaded on first use from the
-authors' shared `weights.zip` (see *Checkpoints* above). To use a Hub repo
-instead, upload once with `python scripts/publish_weights.py <user>/<repo>` and
-set the Space variable `PARAMISP_WEIGHTS_REPO=<user>/<repo>`.
-
-> On a free Hugging Face account, Gradio Spaces require **ZeroGPU** (up to 2, for
-> eligible accounts) or PRO; the app automatically uses `spaces.GPU` when the
-> `spaces` package is present.
 
 ## Deploying to Streamlit Community Cloud (free)
 
-Streamlit Community Cloud hosts a persistent public web app for free with no GPU
-(other than Sleeping after 12 h of inactivity), which suits this CPU model well.
+Streamlit Community Cloud hosts a persistent public web app for free (no GPU;
+apps sleep after 12 h of inactivity and wake on visit).
 
 1. Push this repository to GitHub.
 2. Go to <https://share.streamlit.io> → **Create app** → *Deploy a public app from GitHub*.
@@ -128,16 +61,34 @@ Streamlit Community Cloud hosts a persistent public web app for free with no GPU
 4. *(Optional)* Advanced settings → pick a **Python version** (3.12 is a safe choice).
 5. **Deploy.** The first run downloads the checkpoints (~95 MB) once.
 
-Dependencies are read from `streamlit_app/requirements.txt` — Community Cloud
-looks in the entry point's directory *before* the repository root, so the Gradio
-dependencies at the root are ignored.
+Dependencies are read from the repository-root `requirements.txt`.
 
-Validate the app locally before deploying:
+## Running on Google Colab (free, optional GPU)
+
+Open `notebooks/paramisp_demo_colab.ipynb`. CPU is sufficient; a free T4 GPU is
+available via *Runtime ▸ Change runtime type* if you want it.
+
+## Checkpoints
+
+The official weights are not redistributed here. They are located, in order, at:
+
+1. `weights/<mode>/<camera>.ckpt` (e.g. `weights/inverse/D7000.ckpt`);
+2. the authors' shared Google Drive archive (`weights.zip`), downloaded on first
+   use with `gdown`.
+
+Override the download id with `PARAMISP_GDRIVE_ZIP_ID`, or point
+`PARAMISP_WEIGHTS_DIR` at a directory that already holds the checkpoints.
+
+Camera models: `A7R3`, `D7000`, `D90`, `D40`, `S7`. Modes: `inverse`, `forward`.
+
+## Tests
 
 ```bash
-pip install "streamlit>=1.32,<2"
-python scripts/streamlit_smoketest.py     # headless AppTest run
-streamlit run streamlit_app/streamlit_app.py
+pip install -r requirements.txt
+python scripts/smoke_test.py            # forward pass per direction, no weights
+python scripts/real_inference_test.py   # full pipeline with the official weights
+python scripts/minimal_deps_test.py     # runs with torchvision / rawpy absent
+python scripts/streamlit_smoketest.py   # headless Streamlit AppTest
 ```
 
 ## Citation
