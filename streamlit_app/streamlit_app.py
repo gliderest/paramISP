@@ -123,7 +123,9 @@ with tab_inv:
                               type=["jpg", "jpeg", "png", "tif", "tiff", "bmp", "webp"], key="inv")
 
     with st.expander("Ground-truth RAW (optional — enables PSNR / SSIM)", expanded=True):
-        st.caption("Upload the original RAW for the same image (same pixel size). "
+        st.caption("Upload the original RAW for the same image. It may be a few sensor "
+                   "pixels larger than the image (e.g. RAW 6036×4020 vs JPEG 6000×4000) — "
+                   "the two are aligned and cropped to the same pixel size automatically. "
                    "The built-in examples already ship their ground truth, so no upload is "
                    "needed for those.")
         gt_upload = st.file_uploader("Original RAW (.npy/.tif or camera .dng/.arw/.nef/.cr2)",
@@ -162,13 +164,9 @@ with tab_inv:
                 label = f"{label} (+ ground truth)"
 
         if error is None and gt is not None:
-            if gt.shape[:2] != srgb.shape[:2]:
-                error = (f"Ground-truth RAW is {gt.shape[:2]} but the sRGB image is "
-                         f"{srgb.shape[:2]}. They must come from the same photo at the same "
-                         "pixel size for a fair comparison.")
-                gt = None
-            else:
-                srgb, gt = inference.align_pair(srgb, gt)
+            srgb, gt, align_warnings = inference.register_gt(srgb, gt)
+            for warn_msg in align_warnings:
+                st.warning(warn_msg)
 
         if error is not None:
             st.warning(error)

@@ -99,7 +99,9 @@ def align_pair(srgb: np.ndarray, gt: np.ndarray, multiple: int = 4,
     """Apply *the same* resize + center-crop to an sRGB image and its aligned GT RAW.
 
     Used before computing metrics so the prediction and the ground truth stay
-    pixel-aligned.  Both inputs must share the same spatial size.
+    pixel-aligned.  Both inputs must share the same spatial size — use
+    :func:`register_gt` when the RAW is a few sensor pixels larger than the
+    image (a very common camera situation).
     """
     srgb = np.asarray(srgb, dtype=np.float32)
     gt = np.asarray(gt, dtype=np.float32)
@@ -112,6 +114,167 @@ def align_pair(srgb: np.ndarray, gt: np.ndarray, multiple: int = 4,
         srgb = _resize(srgb, nh, nw, upscale=scale > 1.0)
         gt = _resize(gt, nh, nw, upscale=scale > 1.0)
     return srgb[top:top + ch, left:left + cw], gt[top:top + ch, left:left + cw]
+
+
+def _luma(x: np.ndarray) -> np.ndarray:
+    """Luminance of an ``(H, W[, C])`` float ``[0, 1]`` image."""
+    x = np.asarray(x, dtype=np.float32)
+    if x.ndim == 2:
+        return x
+    if x.shape[-1] >= 3:
+        return 0.299 * x[..., 0] + 0.587 * x[..., 1] + 0.114 * x[..., 2]
+    return x[..., 0]
+
+def _center_crop(a: np.ndarray, th: int, tw: int) -> np.ndarray:
+    h, w = a.shape[:2]
+    top, left = max(0, (h - th) // 2), max(0, (w - tw) // 2)
+    return a[top:top + th, left:left + tw]
+
+
+def _ncc(a: np.ndarray, b: np.ndarray) -> float:
+    """Normalised cross-correlation in [-1, 1] (brightness-invariant)."""
+    u = a - a.mean()
+    v = b - b.mean()
+    denom = float(np.linalg.norm(u) * np.linalg.norm(v))
+    if denom < 1e-9:
+        return 0.0
+    return float(np.sum(u * v) / denom)
+
+
+def _center_ratio(total: int, sub: int) -> int:
+    return max(0, (total - sub) // 2)
+
+
+def _estimate_offset(big: np.ndarray, small: np.ndarray) -> tuple[int, int, float]:
+    """Locate ``small`` inside ``big`` (both full-resolution, same pixel pitch).
+
+    Returns ``(row, col, ncc_score)`` where ``row``/``col`` are the top-left
+    pixel of the region of ``big`` that best matches ``small``.  A small central
+    template is scanned over every valid offset with a brightness-invariant
+    normalised cross-correlation; the scale is reduced only when the offset
+    space would be expensive.
+    """
+    hb, wb = big.shape[:2]
+    hs, ws = small.shape[:2]
+    if hs > hb or ws > wb:
+        raise ValueError(f"image {small.shape[:2]} does not fit inside {big.shape[:2]}")
+    if (hb - hs, wb - ws) == (0, 0):
+        return 0, 0, 1.0
+
+    bg, sg = _luma(big), _luma(small)
+
+    # Choose a scale so the number of offsets to scan stays small, without
+    # losing more than a pixel or two of precision.
+    f = 1.0
+    while True:
+        oy_max = max(0, round(hb * f) - round(hs * f))
+        ox_max = max(0, round(wb * f) - round(ws * f))
+        if (oy_max + 1) * (ox_max + 1) <= 2000 or f <= 0.0625:
+            break
+        f *= 0.5
+
+    bh, bw = max(1, round(hb * f)), max(1, round(wb * f))
+    sh, sw = max(1, round(hs * f)), max(1, round(ws * f))
+    big_s = _resize(bg, bh, bw, upscale=f > 1.0)
+    small_s = _resize(sg, sh, sw, upscale=f > 1.0)
+
+    oy_max, ox_max = bh - sh, bw - sw
+    if small_s.std() < 0.01 or big_s.std() < 0.01:  # flat content: nothing to register
+        return _center_ratio(hb, hs), _center_ratio(wb, ws), 0.0
+
+    # central template of the smaller image
+    th = min(384, max(96, round(min(sh, sw) * 0.28)))
+    t0y, t0x = (sh - th) // 2, (sw - th) // 2
+    templ = small_s[t0y:t0y + th, t0x:t0x + th]
+
+    best = (0, 0)
+    best_n = -1.0
+    for oy in range(oy_max + 1):
+        for ox in range(ox_max + 1):
+            n = _ncc(big_s[oy + t0y:oy + t0y + th, ox + t0x:ox + t0x + th], templ)
+            if n > best_n:
+                best_n, best = n, (oy, ox)
+
+    # Refine around the coarse estimate at twice the resolution (if reduced).
+    while f < 1.0:
+        f2 = min(2.0 * f, 1.0)
+        bh, bw = max(1, round(hb * f2)), max(1, round(wb * f2))
+        sh, sw = max(1, round(hs * f2)), max(1, round(ws * f2))
+        big_s2 = _resize(bg, bh, bw, upscale=f2 > 1.0)
+        small_s2 = _resize(sg, sh, sw, upscale=f2 > 1.0)
+        th = min(384, max(96, round(min(sh, sw) * 0.28)))
+        t0y, t0x = (sh - th) // 2, (sw - th) // 2
+        templ = small_s2[t0y:t0y + th, t0x:t0x + th]
+        cy, cx = round(best[0] * f2 / f), round(best[1] * f2 / f)
+        oy_max, ox_max = bh - sh, bw - sw
+        for oy in range(max(0, cy - 3), min(oy_max, cy + 3) + 1):
+            for ox in range(max(0, cx - 3), min(ox_max, cx + 3) + 1):
+                n = _ncc(big_s2[oy + t0y:oy + t0y + th, ox + t0x:ox + t0x + th], templ)
+                if n > best_n:
+                    best_n, best = n, (oy, ox)
+        f = f2  # ``best`` is now expressed at scale ``f2``
+        if f >= 1.0 or best_n > 0.999:
+            break
+
+    return (int(round(best[0] / f)), int(round(best[1] / f)), best_n)
+
+
+def register_gt(srgb: np.ndarray, gt: np.ndarray, multiple: int = 4,
+                max_side: int | None = 1024, min_side: int = 128):
+    """Align an sRGB image and a ground-truth RAW mosaic that may differ in size.
+
+    Camera RAW mosaics are usually a handful of sensor rows/columns *larger*
+    than the camera JPEG (masked / unused edge pixels), e.g. RAW ``(4020, 6036)``
+    vs sRGB ``(4000, 6000)``.  This finds the pixel offset between the two and
+    crops the larger one to the smaller one's footprint before the shared
+    resize + center-crop.
+
+    Returns ``(aligned_srgb, aligned_gt, warnings)`` so the caller can surface
+    a message when the alignment cannot be verified.
+    """
+    srgb = np.asarray(srgb, dtype=np.float32)
+    gt = np.asarray(gt, dtype=np.float32)
+    if srgb.shape[:2] == gt.shape[:2]:
+        a, b = align_pair(srgb, gt, multiple, max_side, min_side)
+        return a, b, []
+
+    hs, ws = srgb.shape[:2]
+    hr, wr = gt.shape[:2]
+    warnings: list[str] = []
+
+    if hs >= hr and ws >= wr:
+        big, small, big_is_srgb = srgb, gt, True
+    elif hr >= hs and wr >= ws:
+        big, small, big_is_srgb = gt, srgb, False
+    else:
+        # Crossed dimensions (one image taller, the other wider): compare the
+        # common centre region and warn — there is no sane crop for this case.
+        th, tw = min(hs, hr), min(ws, wr)
+        srgb_c = _center_crop(srgb, th, tw)
+        gt_c = _center_crop(gt, th, tw)
+        a, b = align_pair(srgb_c, gt_c, multiple, max_side, min_side)
+        warnings.append(
+            "The sRGB and RAW have different aspect ratios; using their centre overlap."
+        )
+        return a, b, warnings
+
+    oy, ox, score = _estimate_offset(big, small)
+    if score < 0.15:
+        warnings.append(
+            "Could not reliably align the ground-truth RAW with the image "
+            "(weak correlation); using the centre of the RAW."
+        )
+        oy = _center_ratio(big.shape[0], small.shape[0])
+        ox = _center_ratio(big.shape[1], small.shape[1])
+
+    crop = big[oy:oy + small.shape[0], ox:ox + small.shape[1]]
+    if big_is_srgb:
+        srgb, gt = crop, small
+    else:
+        srgb, gt = small, crop
+
+    a, b = align_pair(srgb, gt, multiple, max_side, min_side)
+    return a, b, warnings
 
 
 @torch.no_grad()

@@ -26,6 +26,11 @@ between the prediction and the ground truth, plus the inference time.  The
 ground-truth RAW can be a plain mosaic (`.npy` / `.tif`) or a real camera RAW
 file (`.dng`, `.nef`, `.arw`, `.cr2`, `.raf`, `.rw2`), decoded with `rawpy`.
 
+Camera RAW mosaics are usually a few sensor rows/columns *larger* than the
+camera's JPEG (e.g. RAW `4020×6036` vs JPEG `4000×6000`).  When the two sizes
+differ, the app finds the pixel offset between them automatically and crops
+both to the same pixel size before computing metrics.
+
 ## Project layout
 
 ```
@@ -123,6 +128,7 @@ pip install -r requirements.txt
 python scripts/smoke_test.py            # forward pass per direction, no weights
 python scripts/real_inference_test.py   # full pipeline with the official weights
 python scripts/example_test.py          # every built-in example: PSNR / SSIM / MAE + timing
+python scripts/align_test.py            # sRGB/RAW auto-alignment when pixel sizes differ
 python scripts/minimal_deps_test.py     # runs with torchvision / rawpy absent
 python scripts/streamlit_smoketest.py   # headless Streamlit AppTest
 python scripts/raw_load_test.py         # RAW mosaic loading (.npy/.tif/camera RAW)
