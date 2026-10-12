@@ -118,16 +118,30 @@ def load_raw_mosaic(path: str | Path) -> tuple[np.ndarray, str | None]:
         return _normalize_mosaic(arr), None
 
     # Fall back to rawpy for real camera RAW files (DNG/ARW/NEF/CR2/...).
-    import rawpy
+    try:
+        import rawpy
+    except ImportError as exc:  # actionable message instead of a bare ImportError
+        raise RuntimeError(
+            f"Reading camera RAW files (*{suffix}) needs the optional 'rawpy' "
+            "package, which is not installed.  Install it with `pip install rawpy` "
+            "(it ships pre-built wheels for Linux/macOS/Windows), or upload the "
+            "mosaic as a .npy / .tif file instead."
+        ) from exc
+
     with rawpy.imread(str(path)) as raw:
-        arr = np.asarray(raw.raw_image_visible).astype(np.float32)
+        mosaic = raw.raw_image_visible
+        if mosaic is None:  # some files only expose the full (un-cropped) mosaic
+            mosaic = raw.raw_image
+        arr = np.asarray(mosaic).astype(np.float32)
         black = float(np.mean(raw.black_level_per_channel))
         white = float(raw.white_level)
         hint = None
         try:
-            from rawpy import ColorSpace  # noqa: F401
-        except Exception:
-            pass
+            pattern = np.asarray(raw.raw_pattern)[:2, :2]
+            pattern = np.where(pattern == 3, 1, pattern)  # G2 -> G (single green)
+            hint = utils.camera.BayerPatternFlag.from_numpy(pattern).name
+        except Exception:  # some vendors report an unusual pattern; leave the hint off
+            hint = None
     arr = np.clip((arr - black) / max(white - black, 1e-6), 0.0, 1.0)
     return arr.astype(np.float32), hint
 

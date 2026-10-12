@@ -151,17 +151,24 @@ with tab_inv:
             error = "Upload an sRGB image, or pick a built-in example."
 
         if error is None and gt_upload is not None:
-            gt = demo_examples.load_raw(save_upload(gt_upload))
-            if gt is None:
-                error = "Could not read the ground-truth RAW file."
-            else:
+            try:
+                gt, bayer_hint = dataio.load_raw_mosaic(save_upload(gt_upload))
+                if bayer_hint:
+                    bp = bayer_hint
+            except Exception as exc:  # decode failure / rawpy unavailable
+                error = f"Could not read the ground-truth RAW file: {exc}"
+                gt = None
+            if error is None:
                 label = f"{label} (+ ground truth)"
-                if np.asarray(gt).shape[:2] != np.asarray(srgb).shape[:2]:
-                    error = (f"Ground-truth RAW is {np.asarray(gt).shape[:2]} but the image is "
-                             f"{np.asarray(srgb).shape[:2]} — they must have the same pixel size.")
-                    gt = None
-                else:
-                    srgb, gt = inference.align_pair(srgb, gt)
+
+        if error is None and gt is not None:
+            if gt.shape[:2] != srgb.shape[:2]:
+                error = (f"Ground-truth RAW is {gt.shape[:2]} but the sRGB image is "
+                         f"{srgb.shape[:2]}. They must come from the same photo at the same "
+                         "pixel size for a fair comparison.")
+                gt = None
+            else:
+                srgb, gt = inference.align_pair(srgb, gt)
 
         if error is not None:
             st.warning(error)
@@ -222,7 +229,11 @@ with tab_fwd:
                 path = save_upload(up2)
                 cam, bp, wbv, exif = collect_params(
                     camera, bayer, wb_tuple, use_exif, path, focal, aperture, exposure, iso)
-                raw, hint = dataio.load_raw_mosaic(path)
+                try:
+                    raw, hint = dataio.load_raw_mosaic(path)
+                except Exception as exc:  # decode failure / rawpy unavailable
+                    st.error(f"Could not read the RAW file: {exc}")
+                    st.stop()
                 bp = hint or bp
                 model, device = load_model("forward", cam)
                 out = inference.predict_raw_to_srgb(

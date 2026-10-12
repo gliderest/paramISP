@@ -5,6 +5,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# The tab labels contain a Unicode arrow, which is not representable in the
+# legacy Windows console code page (cp1252) used when output is redirected.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 
 def main():
     os.environ.pop("PARAMISP_WEIGHTS_DIR", None)

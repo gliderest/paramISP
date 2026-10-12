@@ -1,12 +1,14 @@
 """Run the demo end to end with the official checkpoints."""
+import sys
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
 
-from paramisp_demo import dataio, inference, weights
-
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from paramisp_demo import dataio, inference, weights  # noqa: E402
 
 
 def main():

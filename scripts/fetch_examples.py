@@ -6,12 +6,19 @@ writes them to ``examples/``, together with a ``manifest.json`` the Streamlit
 demo reads.  Normalisation reuses the vendored upstream code, so the stored RAW
 matches what the official pipeline feeds the network.
 
+Examples are picked to be *representative*: each instance is stored as many
+512x512 patches, and the first patch (top-left corner) is often blown-out sky or
+a dark corner.  Both extremes distort the absolute PSNR/SSIM of the demo, so for
+every camera we ship the instance/patch whose RAW brightness is closest to that
+camera's median patch brightness (ties broken towards higher contrast).
+
 Usage::
 
     python scripts/fetch_examples.py                 # download the archive, then extract
     python scripts/fetch_examples.py --zip PATH      # use a local archive
     python scripts/fetch_examples.py --per-camera 2  # more examples per camera
     python scripts/fetch_examples.py --list          # just report the archive contents
+    python scripts/fetch_examples.py --patch corner  # old behaviour (top-left patch)
 """
 from __future__ import annotations
 
@@ -44,7 +51,15 @@ CAMERA_SHORT = {
     "NIKON CORPORATION/NIKON D90": "D90",
     "NIKON CORPORATION/NIKON D40": "D40",
     "SAMSUNG/SM-G935F": "S7",
+    "SM-G935F": "S7",
 }
+
+
+def short_name(camera_name: str) -> str:
+    """Map a dataset camera name to the demo's short name (case-insensitive)."""
+    return (CAMERA_SHORT.get(camera_name)
+            or CAMERA_SHORT.get(camera_name.upper())
+            or camera_name.split("/")[-1])
 
 
 def find_instances(zf: zipfile.ZipFile) -> list[tuple[str, dict[str, str]]]:
@@ -86,7 +101,61 @@ def read_exif(zf: zipfile.ZipFile, files: dict[str, str]) -> dict | None:
         return None
 
 
-def build_example(zf: zipfile.ZipFile, folder: str, files: dict[str, str], index: int) -> tuple[dict, dict]:
+def patch_stats(zf: zipfile.ZipFile, files: dict[str, str]) -> list[tuple[str, float, float]]:
+    """Return ``(raw_name, mean, std)`` for every sRGB/RAW patch pair of an instance.
+
+    The RAW digital numbers are enough to rank brightness within one camera
+    (black/white levels are constant per camera), so nothing is normalised here.
+    """
+    stats = []
+    for raw_name in sorted(k for k in files if k.startswith("raw-") and k.endswith(".tif")):
+        if raw_name.replace("raw-", "rgb-", 1) not in files:
+            continue
+        arr = tifffile.imread(io.BytesIO(zf.read(files[raw_name])))
+        arr = np.asarray(arr)
+        if arr.ndim == 3:
+            arr = arr[..., 0]
+        arr = arr.astype(np.float32)
+        stats.append((raw_name, float(arr.mean()), float(arr.std())))
+    return stats
+
+
+def select_examples(per_cam: dict[str, list], per_camera: int, patch_mode: str):
+    """Pick ``per_camera`` representative instances per camera.
+
+    ``per_cam`` maps a short camera name to ``[(folder, files, stats), ...]``.
+    With ``patch_mode="median"`` every camera's candidate patches are ranked by
+    how close their RAW brightness is to that camera's median patch brightness
+    (ties towards higher contrast); with ``"corner"`` the historical "first
+    patch" behaviour is kept.
+    """
+    chosen: list[tuple[str, str, dict, str, int]] = []
+    for short in sorted(per_cam):
+        instances = per_cam[short]
+        means = [m for _f, _files, stats in instances for _rn, m, _s in stats]
+        if not means:
+            continue
+        target = float(np.median(means))
+        ranked = []
+        for folder, files, stats in instances:
+            if patch_mode == "corner":
+                raw_name = sorted(stats)[0][0]
+            else:
+                raw_name = min(stats, key=lambda t: (abs(t[1] - target), -t[2]))[0]
+            stats_by_name = {rn: (m, s) for rn, m, s in stats}
+            mean, std = stats_by_name[raw_name]
+            ranked.append((abs(mean - target), folder, files, raw_name, mean, std))
+        ranked.sort(key=lambda t: t[0])
+        for index, (_dist, folder, files, raw_name, mean, std) in enumerate(ranked[:per_camera]):
+            print(f"- {short} instance {index:02d}  ({folder})")
+            print(f"    patch {raw_name}  RAW mean {mean:.1f} std {std:.1f} "
+                  f"(camera median {target:.1f})")
+            chosen.append((short, folder, files, raw_name, index))
+    return chosen
+
+
+def build_example(zf: zipfile.ZipFile, folder: str, files: dict[str, str], index: int,
+                  raw_name: str | None = None) -> tuple[dict, dict]:
     """Return ``(manifest_entry, files_to_write)`` for one dataset instance."""
     meta = read_metadata(zf, files)
     bayer = np.asarray(meta["bayer_pattern"])
@@ -95,12 +164,19 @@ def build_example(zf: zipfile.ZipFile, folder: str, files: dict[str, str], index
     white_balance = np.asarray(meta["white_balance"], dtype=np.float32)
     color_matrix = np.asarray(meta["camera_matrix"], dtype=np.float32)
     camera_name = str(meta["camera_name"])
-    short = CAMERA_SHORT.get(camera_name, camera_name.split("/")[-1])
+    short = short_name(camera_name)
 
-    rgb_name = sorted(k for k in files if k.startswith("rgb-") and k.endswith(".tif"))[0]
-    raw_name = sorted(k for k in files if k.startswith("raw-") and k.endswith(".tif"))[0]
+    if raw_name is None:
+        raw_name = sorted(k for k in files if k.startswith("raw-") and k.endswith(".tif"))[0]
+    rgb_name = raw_name.replace("raw-", "rgb-", 1)
+    if rgb_name not in files:
+        rgb_name = sorted(k for k in files if k.startswith("rgb-") and k.endswith(".tif"))[0]
     rgb = tifffile.imread(io.BytesIO(zf.read(files[rgb_name])))
     raw = tifffile.imread(io.BytesIO(zf.read(files[raw_name])))
+    if raw.ndim == 3 and raw.shape[-1] == 1:  # stored as (H, W, 1)
+        raw = raw[..., 0]
+    if rgb.ndim == 3 and rgb.shape[-1] == 1:
+        rgb = rgb[..., 0]
 
     # normalise exactly like the upstream pipeline
     rgb_f = np.asarray(utils.convert.dequantize(rgb, augmentation=False), dtype=np.float32)
@@ -156,6 +232,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--zip", default=str(ROOT / "patchsets.zip"), help="path to a local patchsets.zip")
     ap.add_argument("--per-camera", type=int, default=1, help="number of examples per camera")
+    ap.add_argument("--patch", choices=("median", "corner"), default="median",
+                    help="which patch of an instance to ship (default: median brightness)")
     ap.add_argument("--list", action="store_true", help="only report the archive contents")
     args = ap.parse_args()
 
@@ -175,20 +253,21 @@ def main():
                 print(f"  {name}: {n}")
             return
 
-        chosen = []
-        per: dict[str, int] = {}
+        # Scan every camera's patches so the shipped example can be the one with
+        # a representative (median) exposure.
+        per_cam: dict[str, list] = {}
         for folder, files in instances:
             name = str(read_metadata(zf, files)["camera_name"])
-            short = CAMERA_SHORT.get(name, name.split("/")[-1])
-            if per.get(short, 0) >= args.per_camera:
-                continue
-            per[short] = per.get(short, 0) + 1
-            chosen.append((short, folder, files, per[short] - 1))
+            short = short_name(name)
+            stats = patch_stats(zf, files)
+            if stats:
+                per_cam.setdefault(short, []).append((folder, files, stats))
+
+        chosen = select_examples(per_cam, args.per_camera, args.patch)
 
         entries = []
-        for short, folder, files, idx in chosen:
-            print(f"- {short} instance {idx:02d}  ({folder})")
-            entry, writes = build_example(zf, folder, files, idx)
+        for short, folder, files, raw_name, idx in chosen:
+            entry, writes = build_example(zf, folder, files, idx, raw_name)
             write_files(writes)
             entries.append(entry)
 

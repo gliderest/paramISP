@@ -22,7 +22,9 @@ available, or set manually.
 
 If the original RAW for the image is available — either uploaded by the user or
 provided by a built-in example — the app also computes **PSNR, SSIM and MAE**
-between the prediction and the ground truth, plus the inference time.
+between the prediction and the ground truth, plus the inference time.  The
+ground-truth RAW can be a plain mosaic (`.npy` / `.tif`) or a real camera RAW
+file (`.dng`, `.nef`, `.arw`, `.cr2`, `.raf`, `.rw2`), decoded with `rawpy`.
 
 ## Project layout
 
@@ -87,7 +89,19 @@ To regenerate or extend them from the dataset:
 ```bash
 python scripts/fetch_examples.py                 # downloads patchsets.zip (~2.7 GB), 1 example per camera
 python scripts/fetch_examples.py --per-camera 2  # more examples per camera
+python scripts/fetch_examples.py --zip patchsets.zip
 ```
+
+Each dataset instance is stored as many 512×512 patches.  The script ships the
+instance/patch whose RAW brightness is closest to that camera's **median** patch
+brightness, because the corner patch is often blown-out sky or a near-black
+corner.  Use `--patch corner` to restore the old "first patch" behaviour.
+
+> **Reading the metrics.** PSNR/SSIM are computed on the exposure-normalised RAW
+> exactly as in the upstream `compute_metrics`, so they are *absolute*: a very
+> dark crop scores higher than a bright one simply because the residual is
+> smaller in magnitude.  Compare numbers between cameras with similar scene
+> brightness, not across the whole table.
 
 ## Checkpoints
 
@@ -108,8 +122,10 @@ Camera models: `A7R3`, `D7000`, `D90`, `D40`, `S7`. Modes: `inverse`, `forward`.
 pip install -r requirements.txt
 python scripts/smoke_test.py            # forward pass per direction, no weights
 python scripts/real_inference_test.py   # full pipeline with the official weights
+python scripts/example_test.py          # every built-in example: PSNR / SSIM / MAE + timing
 python scripts/minimal_deps_test.py     # runs with torchvision / rawpy absent
 python scripts/streamlit_smoketest.py   # headless Streamlit AppTest
+python scripts/raw_load_test.py         # RAW mosaic loading (.npy/.tif/camera RAW)
 ```
 
 ## Citation

@@ -9,6 +9,10 @@ from toolz import isiterable as _isiterable
 
 TTensor = TypeVar("TTensor", torch.Tensor, np.ndarray)
 
+# NumPy on Windows has no float128; alias it to a value that never matches a
+# real dtype there (the official code is Linux-only).
+NP_FLOAT128 = getattr(np, "float128", None)
+
 
 def isiterable(x) -> TypeGuard[list]:
     """ Check if the object is iterable. """
@@ -68,8 +72,8 @@ def as_np_dtype(dtype: torch.dtype | type | str) -> type:
         return np.float32
     if dtype in ["float64", "f64", float, np.float64, torch.float64]:
         return np.float64
-    if dtype in ["float128", "f128", np.float128]:
-        return np.float128
+    if dtype in ["float128", "f128", NP_FLOAT128]:
+        return NP_FLOAT128 or np.float64
     if dtype in ["complex64", "c64", np.complex64, torch.complex64]:
         return np.complex64
     if dtype in ["complex128", "c128", np.complex128, torch.complex128]:
@@ -111,7 +115,7 @@ def is_complex_dtype(dtype: torch.dtype | type | str) -> bool:
 
 def is_incompatible_dtype(dtype: np.dtype) -> bool:
     """ Check if the numpy.dtype is incompatible with torch.dtype. """
-    return dtype in [np.uint16, np.uint32, np.uint64, np.float128, np.complex256]
+    return dtype in [np.uint16, np.uint32, np.uint64, NP_FLOAT128, np.complex256]
 
 
 def as_signed(x: TTensor) -> TTensor:
@@ -331,7 +335,7 @@ def dequantize(
         in_range_min, in_range_max = in_range
         assert not isiterable(in_range_max), "vector type in_range.max is not supported."
 
-    mid_dtype = np.float64 if out_dtype in [torch.float64, np.float64, np.float128] else np.float32
+    mid_dtype = np.float64 if out_dtype in [torch.float64, np.float64, NP_FLOAT128] else np.float32
     x = as_type(x, mid_dtype)
 
     if augmentation:
@@ -386,7 +390,7 @@ def quantize(
     else:
         out_range_min, out_range_max = out_range
 
-    if x.dtype not in [torch.float32, torch.float64, np.float32, np.float64, np.float128]:
+    if x.dtype not in [torch.float32, torch.float64, np.float32, np.float64, NP_FLOAT128]:
         x = as_type(x, np.float32)
 
     x = x * (out_range_max - out_range_min) + out_range_min

@@ -1,9 +1,15 @@
 """Quick smoke test: build the network and run one forward pass per direction."""
+import sys
+from pathlib import Path
+
 import numpy as np
 import torch
 
-from paramisp_demo import dataio
-from paramisp_demo.net import ParamISPNet
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from paramisp_demo import dataio  # noqa: E402
+from paramisp_demo.net import ParamISPNet  # noqa: E402
 
 
 def main():
