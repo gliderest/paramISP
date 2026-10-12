@@ -34,6 +34,7 @@ available, or set manually.
 
 ```
 app.py                      Gradio interface
+index.html                  static project page (served by a Static Space)
 paramisp_demo/
   net.py                    the ParamISP network (PyTorch port, no Lightning)
   dataio.py                 image/EXIF loading + building the network input batch
@@ -74,17 +75,28 @@ python app.py
 
 ```bash
 huggingface-cli login --token <WRITE_TOKEN>
-python scripts/deploy_space.py <user>/<space-name>
+
+# Free Static Space (serves index.html; works on any account)
+python scripts/deploy_space.py <user>/<space-name> --static
+
+# Gradio Space (needs ZeroGPU — free on eligible accounts — or PRO/cpu-basic)
+python scripts/deploy_space.py <user>/<space-name> --hardware zero-a10g
 ```
 
-The Space is created with the Gradio SDK and all runtime files are uploaded.
+The **Static** Space serves `index.html`, a self-contained project page with real
+result images (`scripts/make_static_assets.py`) and a link to the code. The full
+Gradio app is uploaded alongside it; to turn the interactive demo on once you
+have hardware, set `sdk: gradio` (plus `sdk_version`/`app_file`) in the Space's
+README front matter.
+
 Checkpoints are **not** committed; they are downloaded on first use from the
 authors' shared `weights.zip` (see *Checkpoints* above). To use a Hub repo
 instead, upload once with `python scripts/publish_weights.py <user>/<repo>` and
 set the Space variable `PARAMISP_WEIGHTS_REPO=<user>/<repo>`.
 
-> On a free Hugging Face account, Gradio Spaces must run on **ZeroGPU**; the app
-> automatically uses `spaces.GPU` when the `spaces` package is present.
+> On a free Hugging Face account, Gradio Spaces require **ZeroGPU** (up to 2, for
+> eligible accounts) or PRO; the app automatically uses `spaces.GPU` when the
+> `spaces` package is present.
 
 ## Citation
 

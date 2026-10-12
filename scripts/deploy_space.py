@@ -6,16 +6,18 @@ Prerequisites::
 
 Usage::
 
-    python scripts/deploy_space.py <user>/<space-name> [--private]
+    # Free Static Space (serves index.html; no hardware needed)
+    python scripts/deploy_space.py <user>/<space-name> --static
 
-The Space is created with the Gradio SDK and every file needed at runtime is
-uploaded.  Local-only files (``.venv``, ``weights``, caches, ``scripts``) are
-skipped; the demo fetches the checkpoints at runtime instead.
+    # Gradio Space on ZeroGPU / paid hardware
+    python scripts/deploy_space.py <user>/<space-name> [--hardware zero-a10g]
+
+Local-only files (``.venv``, ``weights``, caches, ``scripts``) are skipped; the
+demo fetches the checkpoints at runtime instead.
 """
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -27,6 +29,19 @@ IGNORE = [
 ]
 
 
+def _static_readme(text: str) -> str:
+    """Return README text with the front matter switched to the Static SDK."""
+    out = []
+    for line in text.splitlines():
+        if line.startswith("sdk:") and "sdk_version" not in line:
+            out.append("sdk: static")
+        elif line.startswith("app_file:") or line.startswith("sdk_version:"):
+            continue
+        else:
+            out.append(line)
+    return "\n".join(out) + "\n"
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("repo_id", help="e.g. my-user/paramISP")
@@ -34,6 +49,9 @@ def main():
     parser.add_argument("--hardware", default="zero-a10g",
                         help="Space hardware flavor (default: zero-a10g/ZeroGPU, "
                              "required on free accounts; use cpu-basic on Pro).")
+    parser.add_argument("--static", action="store_true",
+                        help="Create a free Static Space instead (serves index.html; "
+                             "no hardware). The SDK can be switched to 'gradio' later.")
     args = parser.parse_args()
 
     if "/" not in args.repo_id:
@@ -43,9 +61,31 @@ def main():
 
     api = HfApi()
     try:
-        user = api.whoami()["name"]
+        api.whoami()
     except Exception as exc:  # noqa: BLE001
         raise SystemExit(f"Not logged in — run 'huggingface-cli login' first ({exc})")
+
+    if args.static:
+        print(f"Creating Static Space {args.repo_id} ...")
+        api.create_repo(repo_id=args.repo_id, repo_type="space",
+                        space_sdk="static", private=args.private, exist_ok=True)
+        print("Uploading files (Static Space serves index.html) ...")
+        api.upload_folder(
+            repo_id=args.repo_id, repo_type="space", folder_path=str(ROOT),
+            ignore_patterns=IGNORE + ["README.md"],
+            commit_message="Add ParamISP static demo",
+        )
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        api.upload_file(
+            repo_id=args.repo_id, repo_type="space",
+            path_or_fileobj=_static_readme(readme).encode("utf-8"),
+            path_in_repo="README.md",
+            commit_message="Set Space SDK to static",
+        )
+        print(f"\nDone. Space: https://huggingface.co/spaces/{args.repo_id}")
+        print("The full Gradio app is in the repo; to switch it on once you have "
+              "hardware, set 'sdk: gradio' (plus sdk_version/app_file) in the README.")
+        return
 
     print(f"Creating Space {args.repo_id} (SDK: gradio, hardware: {args.hardware}) ...")
     try:
