@@ -11,6 +11,7 @@ __pycache__/
 weights/
 weights_tmp/
 weights_gdrive/
+.np2tmp/
 *.ckpt
 *.zip
 

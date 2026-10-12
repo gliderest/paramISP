@@ -33,8 +33,10 @@ available, or set manually.
 ## How it works
 
 ```
-app.py                      Gradio interface
+app.py                      Gradio interface (Hugging Face Space)
+streamlit_app/              Streamlit Community Cloud app (+ its requirements.txt)
 index.html                  static project page (served by a Static Space)
+notebooks/                  Google Colab runner
 paramisp_demo/
   net.py                    the ParamISP network (PyTorch port, no Lightning)
   dataio.py                 image/EXIF loading + building the network input batch
@@ -77,6 +79,7 @@ The model is only **~0.7M parameters** and runs on **CPU**, so a GPU is optional
 
 | Option | Cost | Notes |
 |---|---|---|
+| **Streamlit Community Cloud** | free | persistent hosted web app, CPU only (up to 2.7 GB RAM) — see below |
 | **Local** | free | `python app.py --share` creates a public `*.gradio.live` link (no account) |
 | **Google Colab** | free | open `notebooks/paramisp_demo_colab.ipynb`; free T4 via *Runtime ▸ Change runtime type* |
 | **Kaggle Notebooks** | free | T4/P100 (~30 h/week); same steps as the Colab notebook |
@@ -112,6 +115,30 @@ set the Space variable `PARAMISP_WEIGHTS_REPO=<user>/<repo>`.
 > On a free Hugging Face account, Gradio Spaces require **ZeroGPU** (up to 2, for
 > eligible accounts) or PRO; the app automatically uses `spaces.GPU` when the
 > `spaces` package is present.
+
+## Deploying to Streamlit Community Cloud (free)
+
+Streamlit Community Cloud hosts a persistent public web app for free with no GPU
+(other than Sleeping after 12 h of inactivity), which suits this CPU model well.
+
+1. Push this repository to GitHub.
+2. Go to <https://share.streamlit.io> → **Create app** → *Deploy a public app from GitHub*.
+3. Repository `<user>/paramISP`, Branch `main`,
+   **Main file path** `streamlit_app/streamlit_app.py`.
+4. *(Optional)* Advanced settings → pick a **Python version** (3.12 is a safe choice).
+5. **Deploy.** The first run downloads the checkpoints (~95 MB) once.
+
+Dependencies are read from `streamlit_app/requirements.txt` — Community Cloud
+looks in the entry point's directory *before* the repository root, so the Gradio
+dependencies at the root are ignored.
+
+Validate the app locally before deploying:
+
+```bash
+pip install "streamlit>=1.32,<2"
+python scripts/streamlit_smoketest.py     # headless AppTest run
+streamlit run streamlit_app/streamlit_app.py
+```
 
 ## Citation
 

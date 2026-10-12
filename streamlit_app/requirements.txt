@@ -1,0 +1,22 @@
+# Streamlit Community Cloud dependencies for the ParamISP demo (CPU only).
+#
+# This file sits next to the entry point (streamlit_app.py), so Community Cloud
+# uses it instead of the repository-root requirements.txt (which targets the
+# Hugging Face Gradio Space and pulls in Gradio).
+#
+# `torch` is deliberately unpinned so it resolves to a build matching whatever
+# Python version Community Cloud provides; the vendored code is NumPy-2 clean.
+torch
+numpy
+scipy
+pillow
+tifffile
+exifread
+matplotlib
+toolz
+pyyaml
+python-dotenv
+rawpy
+gdown
+kornia>=0.7,<0.9
+streamlit>=1.32,<2

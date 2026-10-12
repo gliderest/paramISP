@@ -7,8 +7,10 @@
 # `torch` is intentionally *not* pinned: the Space runtime (ZeroGPU) preinstalls
 # a supported version, and pinning an unsupported one raises
 # `CONFIG_ERROR: torch version in requirements.txt is not compatible with ZeroGPU`.
-# `numpy` is held below 2.0 because the vendored upstream code still uses
-# `np.float_` / `np.bool8` (removed in NumPy 2).
+# `numpy` is held below 2.0 for maximum compatibility with the runtime's
+# preinstalled torch.  (The vendored code is also NumPy-2 clean — see
+# paramisp_src/utils/camera.py and convert.py — so this can be relaxed when a
+# newer torch is guaranteed.)
 numpy<2
 scipy
 pillow

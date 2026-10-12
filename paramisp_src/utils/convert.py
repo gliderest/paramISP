@@ -17,7 +17,7 @@ def isiterable(x) -> TypeGuard[list]:
 
 def as_torch_dtype(dtype: torch.dtype | type | str) -> torch.dtype:
     """ Convert dtype to torch.dtype. """
-    if dtype in ["bool", bool, np.bool8, torch.bool]:
+    if dtype in ["bool", bool, np.bool_, torch.bool]:
         return torch.bool
     if dtype in ["uint8", "u8", np.uint8, torch.uint8]:
         return torch.uint8
@@ -44,8 +44,8 @@ def as_torch_dtype(dtype: torch.dtype | type | str) -> torch.dtype:
 
 def as_np_dtype(dtype: torch.dtype | type | str) -> type:
     """ Convert dtype to numpy.dtype. """
-    if dtype in ["bool", bool, np.bool8, torch.bool]:
-        return np.bool8
+    if dtype in ["bool", bool, np.bool_, torch.bool]:
+        return np.bool_
     if dtype in ["uint8", "u8", np.uint8, torch.uint8]:
         return np.uint8
     if dtype in ["uint16", "u16", np.uint16]:
