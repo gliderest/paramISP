@@ -1,8 +1,6 @@
 import io
 
 import torch
-import torchvision.transforms.functional as TF
-import torchvision.utils
 import numpy as np
 
 import PIL.Image
@@ -150,6 +148,12 @@ def rawgrid(images, *, padding: int = 2, transpose: bool = False) -> torch.Tenso
         plot: Display outputs using IPython; use only in Jupyter environments.
         transpose: transpose grid axis.
     """
+    # Imported lazily so that ``utils.plot`` — and therefore ``utils.io``,
+    # ``data.utils`` and the whole demo — can be imported even when torchvision
+    # is not installed (only this helper needs it).
+    import torchvision.transforms.functional as TF
+    import torchvision.utils
+
     assert isiterable(images) and len(images) > 0 and all(map(isiterable, images)), \
         "`images` must be a 2D list of images"
     assert any(len(row) > 0 for row in images), \

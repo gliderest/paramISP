@@ -11,7 +11,10 @@ import numpy as np
 import numpy.typing as npt
 import scipy.io
 import PIL.Image as pil
-import rawpy
+try:  # optional: only needed to read camera RAW files (loadraw)
+    import rawpy
+except ImportError:  # pragma: no cover - keep importing without it
+    rawpy = None  # type: ignore[assignment]
 import tifffile
 import exifread
 

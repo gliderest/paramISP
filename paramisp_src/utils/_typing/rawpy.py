@@ -6,7 +6,10 @@ import sys
 import os
 
 import numpy as np
-import rawpy
+try:  # typing-only module: stay importable when rawpy is unavailable
+    import rawpy
+except ImportError:  # pragma: no cover
+    rawpy = None  # type: ignore[assignment]
 
 
 ImageSizes = namedtuple("ImageSizes", [
@@ -39,7 +42,7 @@ class ThumbFormat(Enum):
 Thumbnail = namedtuple("Thumbnail", ["format", "data"])
 
 
-class RawPy(rawpy.RawPy):  # type: ignore
+class RawPy(rawpy.RawPy if rawpy is not None else object):  # type: ignore
     """ Load RAW images, work on their data, and create a postprocessed (demosaiced) image.
 
     All operations are implemented using numpy arrays.
@@ -339,7 +342,7 @@ class HighlightMode(Enum):
         raise NotImplementedError
 
 
-class Params(rawpy.Params):  # type: ignore
+class Params(rawpy.Params if rawpy is not None else object):  # type: ignore
     """ A class that handles postprocessing parameters.
 
     NOTE: Typing only definitions for rawpy.Params
