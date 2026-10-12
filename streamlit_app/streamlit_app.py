@@ -163,6 +163,10 @@ with tab_inv:
             if error is None:
                 label = f"{label} (+ ground truth)"
 
+        # remember the original (pre-alignment) pixel sizes for the UI
+        srgb_size = srgb.shape[:2] if srgb is not None else None
+        raw_size = gt.shape[:2] if gt is not None else None
+
         if error is None and gt is not None:
             srgb, gt, align_warnings = inference.register_gt(srgb, gt)
             for warn_msg in align_warnings:
@@ -186,6 +190,13 @@ with tab_inv:
                     color_matrix=cm, camera_model=cam)
 
             st.success(f"{param_summary(cam, bp, exif)}  ·  {label}")
+            size_parts = [f"sRGB {srgb_size[0]}×{srgb_size[1]} px"]
+            aligned = srgb.shape[:2]
+            if raw_size is not None:
+                size_parts.append(f"RAW {raw_size[0]}×{raw_size[1]} px")
+            if aligned != srgb_size or (raw_size is not None and aligned != raw_size):
+                size_parts.append(f"aligned {aligned[0]}×{aligned[1]} px")
+            st.caption(" · ".join(size_parts))
             # ---- metrics ----
             if gt is not None:
                 scores = metrics.compare(mosaic, gt)
@@ -244,6 +255,8 @@ with tab_fwd:
                     model, raw, device, camera_model=cam, bayer_pattern=bp,
                     white_balance=wbv, exif=exif)
             st.success(param_summary(cam, bp, exif))
+            st.caption(f"RAW {raw.shape[0]}×{raw.shape[1]} px → rendered "
+                       f"{out.shape[1]}×{out.shape[2]} px")
             st.image(np.clip(out, 0.0, 1.0), caption="Rendered sRGB")
 
 st.divider()
