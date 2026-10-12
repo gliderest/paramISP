@@ -65,11 +65,26 @@ Camera models: `A7R3`, `D7000`, `D90`, `D40`, `S7`. Modes: `inverse`, `forward`.
 python -m venv .venv
 . .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-python app.py
+python app.py             # add --share for a temporary public *.gradio.live link
 ```
 
 `scripts/smoke_test.py` runs a forward pass per direction without weights;
 `scripts/real_inference_test.py` runs the full pipeline with the official weights.
+
+## Free ways to run it
+
+The model is only **~0.7M parameters** and runs on **CPU**, so a GPU is optional.
+
+| Option | Cost | Notes |
+|---|---|---|
+| **Local** | free | `python app.py --share` creates a public `*.gradio.live` link (no account) |
+| **Google Colab** | free | open `notebooks/paramisp_demo_colab.ipynb`; free T4 via *Runtime ▸ Change runtime type* |
+| **Kaggle Notebooks** | free | T4/P100 (~30 h/week); same steps as the Colab notebook |
+| **Lightning AI Studio / Modal** | free credits | run `python app.py --host 0.0.0.0 --port 7860` |
+| **Hugging Face ZeroGPU** | free* | Gradio Space for eligible accounts, or via a community grant |
+| **Hugging Face Static** | free | `--static`; serves `index.html` (cannot run the model) |
+
+\* Hugging Face requires a paid plan for Gradio hosting on most accounts; the exceptions are free ZeroGPU allocations (up to 2, for personal accounts in good standing) and approved community grants.
 
 ## Deploying to Hugging Face Spaces
 

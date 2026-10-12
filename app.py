@@ -13,6 +13,8 @@ Two directions are supported:
 """
 from __future__ import annotations
 
+import argparse
+import os
 import tempfile
 import uuid
 from pathlib import Path
@@ -22,9 +24,9 @@ import numpy as np
 
 from paramisp_demo import dataio, inference, weights
 
-try:  # ZeroGPU support (only present on Hugging Face ZeroGPU Spaces).
+try:  # ZeroGPU is only meaningful inside a Hugging Face Space.
     import spaces
-    _gpu = spaces.GPU(duration=120)
+    _gpu = spaces.GPU(duration=120) if os.environ.get("SPACE_ID") else (lambda fn: fn)
 except Exception:  # noqa: BLE001
     def _gpu(fn):
         return fn
@@ -202,5 +204,12 @@ def build_demo() -> gr.Blocks:
 
 
 if __name__ == "__main__":
-    build_demo().queue().launch()
+    ap = argparse.ArgumentParser(description="ParamISP demo")
+    ap.add_argument("--share", action="store_true",
+                    help="create a temporary public gradio.live link (free)")
+    ap.add_argument("--port", type=int, default=None)
+    ap.add_argument("--host", default=None)
+    _args = ap.parse_args()
+    _share = _args.share or os.environ.get("GRADIO_SHARE", "").lower() in ("1", "true", "yes")
+    build_demo().queue().launch(share=_share, server_port=_args.port, server_name=_args.host)
 
